@@ -1,41 +1,16 @@
 #!/bin/bash
 
-echo "Preparing AWS provider auth for apply..."
-printenv
-jq -n -r --arg JWT "$TFC_WORKLOAD_IDENTITY_TOKEN" --arg ROLE "$TFC_VAULT_APPLY_ROLE" '{"jwt": $JWT, "role": $ROLE}' > payload.json
+echo "Setting up Network Mirror"
+cat >> "${HOME}/.terraformrc" << EOF
 
-export VAULT_TOKEN=$(curl --insecure --silent --show-error $VAULT_ADDR/v1/auth/jwt/login \
-    --request POST \
-    --data @payload.json | jq -r '.auth.client_token')
+provider_installation {
+    direct {
+        exclude = ["registry.terraform.io/*/*"]
+    }
+    network_mirror {
+        url = "https://shriram-network-mirror.s3.ap-south-1.amazonaws.com"
+        include = ["registry.terraform.io/*/*"]
+    }
+}
 
-echo $VAULT_TOKEN > ~/.vault-token
-if [ "$CLOUD_PROVIDER_AWS" == "true" ]
-then
-    CREDS=$(curl --insecure --silent --show-error --header "X-Vault-Token: $VAULT_TOKEN" $VAULT_ADDR/v1/$TFC_WORKSPACE_NAME/$VAULT_PATH/creds/$TFC_VAULT_APPLY_ROLE)
-
-    AWS_ACCESS_KEY_ID="$(jq -r '.data.access_key' <<<$CREDS)"
-    AWS_SECRET_ACCESS_KEY="$(jq -r '.data.secret_key' <<<$CREDS)"
-    AWS_SESSION_TOKEN="$(jq -r '.data.security_token' <<<$CREDS)"
-    sleep 10  # wait for IAM User eventual consistency
-
-    mkdir ~/.aws
-    cat <<EOF > ~/.aws/credentials
-    [default]
-    aws_access_key_id=$AWS_ACCESS_KEY_ID
-    aws_secret_access_key=$AWS_SECRET_ACCESS_KEY
-    aws_session_token=$AWS_SESSION_TOKEN
 EOF
-
-    echo "AWS provider auth for apply prepared"
-    echo "AWS ACCESS KEY ID: $AWS_ACCESS_KEY_ID"
-
-fi
-
-if [ "$CLOUD_PROVIDER_AZURE" == "true" ]
-then
-    CREDS=$(curl --insecure --silent --show-error --header "X-Vault-Token: $VAULT_TOKEN" $VAULT_ADDR/v1/$TFC_WORKSPACE_NAME/$VAULT_PATH/creds/$TFC_VAULT_APPLY_ROLE)
-
-    CLIENT_ID="$(jq -r '.data.client_id' <<<$CREDS)"
-    CLIENT_SECRET="$(jq -r '.data.client_secret' <<<$CREDS)"
-fi
-
