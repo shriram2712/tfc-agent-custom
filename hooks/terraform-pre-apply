@@ -2,7 +2,7 @@
 
 echo "Setting up Network Mirror"
 cat >> "${HOME}/.terraformrc" << EOF
-
+disable_checkpoint = true
 provider_installation {
     direct {
         exclude = ["registry.terraform.io/*/*"]
